@@ -175,29 +175,20 @@ async function fetchRandomTrack(){
   return tracks[Math.floor(Math.random()*tracks.length)];
 }
 
-/* ===== پالس نور هماهنگ با صدای واقعی (Web Audio Analyser) ===== */
-async function attachAnalyser(){
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  if(ctx.state === 'suspended'){
-    await ctx.resume(); // موبایل‌ها گاهی AudioContext رو معلق نگه میدارن تا صریحاً resume بشه
-  }
-  const src = ctx.createMediaElementSource(player);
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 256;
-  src.connect(analyser);
-  analyser.connect(ctx.destination);
-  const data = new Uint8Array(analyser.frequencyBinCount);
-
-  function loop(){
-    analyser.getByteFrequencyData(data);
-    const bass = data.slice(0,8).reduce((a,b)=>a+b,0)/8;
-    const scale = 1 + (bass/255)*0.35;
-    beam.style.filter = `brightness(${1 + (bass/255)*0.6})`;
-    lights.style.transform = `scale(${scale})`;
-    if(bass > 150 && Math.random() < 0.15) spawnConfetti(3);
-    requestAnimationFrame(loop);
-  }
-  loop();
+/* ===== پالس نور با ریتم شبیه‌سازی‌شده (بدون دست‌کاری خروجی صدا) ===== */
+let pulseTimer = null;
+function startLightPulse(){
+  if(pulseTimer) return;
+  const BEAT_MS = 480; // ریتم تقریبی پارتی
+  pulseTimer = setInterval(()=>{
+    beam.style.filter = 'brightness(1.5)';
+    lights.style.transform = 'scale(1.2)';
+    if(Math.random() < 0.4) spawnConfetti(4);
+    setTimeout(()=>{
+      beam.style.filter = 'brightness(1)';
+      lights.style.transform = 'scale(1)';
+    }, BEAT_MS*0.4);
+  }, BEAT_MS);
 }
 
 async function startParty(){
@@ -217,7 +208,7 @@ async function startParty(){
 
   try{
     await player.play();
-    await attachAnalyser();
+    startLightPulse();
     muteBtn.classList.add('show');
   }catch(e){
     // مرورگر اجازه پخش خودکار نداد -> یه تاچ ساده لازمه
@@ -228,7 +219,7 @@ async function startParty(){
 tapBtn.addEventListener('click', async ()=>{
   tapBtn.classList.remove('show');
   await player.play();
-  await attachAnalyser();
+  startLightPulse();
   muteBtn.classList.add('show');
 });
 
