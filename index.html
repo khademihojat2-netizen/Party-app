@@ -176,8 +176,11 @@ async function fetchRandomTrack(){
 }
 
 /* ===== پالس نور هماهنگ با صدای واقعی (Web Audio Analyser) ===== */
-function attachAnalyser(){
+async function attachAnalyser(){
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if(ctx.state === 'suspended'){
+    await ctx.resume(); // موبایل‌ها گاهی AudioContext رو معلق نگه میدارن تا صریحاً resume بشه
+  }
   const src = ctx.createMediaElementSource(player);
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 256;
@@ -214,7 +217,7 @@ async function startParty(){
 
   try{
     await player.play();
-    attachAnalyser();
+    await attachAnalyser();
     muteBtn.classList.add('show');
   }catch(e){
     // مرورگر اجازه پخش خودکار نداد -> یه تاچ ساده لازمه
@@ -225,9 +228,16 @@ async function startParty(){
 tapBtn.addEventListener('click', async ()=>{
   tapBtn.classList.remove('show');
   await player.play();
-  attachAnalyser();
+  await attachAnalyser();
   muteBtn.classList.add('show');
 });
+
+// لایه ایمنی: هر تاچی روی صفحه، اگه صدا هنوز واقعاً پخش نمیشه دوباره تلاش کن
+document.addEventListener('click', async ()=>{
+  if(player.paused && player.src){
+    try{ await player.play(); }catch(e){}
+  }
+}, {once:false});
 
 muteBtn.addEventListener('click', ()=>{
   if(player.muted){
