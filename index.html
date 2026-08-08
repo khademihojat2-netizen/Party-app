@@ -186,8 +186,21 @@ function spawnConfetti(n){
 async function fetchRandomTrack(){
   const tags = (activeTheme && activeTheme.tags) || 'party+dance+electronic';
   const url = `${BACKEND_URL}/track?tags=${encodeURIComponent(tags)}`;
-  const res = await fetch(url);
-  const data = await res.json();
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 12000); // تایم‌اوت ۱۲ ثانیه‌ای
+
+  let data;
+  try{
+    const res = await fetch(url, {signal: controller.signal});
+    if(!res.ok) throw new Error(`سرور خطا داد: ${res.status}`);
+    data = await res.json();
+  }catch(e){
+    throw new Error('اتصال به سرور برقرار نشد: ' + e.message);
+  }finally{
+    clearTimeout(timeoutId);
+  }
+
   const tracks = data.results || [];
   if(!tracks.length) return null;
 
@@ -219,7 +232,17 @@ function startLightPulse(){
 async function playTrack(){
   headline.textContent = 'در حال پیدا کردن آهنگ…';
   trackInfo.textContent = '';
-  const track = await fetchRandomTrack();
+
+  let track;
+  try{
+    track = await fetchRandomTrack();
+  }catch(e){
+    headline.textContent = 'اتصال به سرور برقرار نشد 😕';
+    trackInfo.textContent = 'دوباره تلاش می‌کنم…';
+    setTimeout(playTrack, 5000);
+    return;
+  }
+
   if(!track){
     headline.textContent = 'مشکلی در گرفتن موزیک بود 😕';
     // یه بار دیگه بعد از چند ثانیه امتحان کن
