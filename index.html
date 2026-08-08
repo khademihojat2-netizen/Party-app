@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>مهمونی</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --void:#0a0512;
+    --violet:#7b2fff;
+    --magenta:#ff2fb0;
+    --cyan:#22e5ff;
+    --gold:#ffd23f;
+    --ink:#f5eefc;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    height:100%;
+    overflow:hidden;
+    background:var(--void);
+    font-family:'Vazirmatn', sans-serif;
+    color:var(--ink);
+  }
+  #stage{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  #lights{
+    position:absolute; inset:0;
+    opacity:0;
+    transition:opacity .8s ease;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,47,176,.55), transparent 45%),
+      radial-gradient(circle at 80% 25%, rgba(34,229,255,.5), transparent 45%),
+      radial-gradient(circle at 50% 80%, rgba(123,47,255,.55), transparent 50%);
+    filter:blur(10px) saturate(1.3);
+    animation:drift 9s ease-in-out infinite;
+  }
+  #lights.on{opacity:1;}
+  @keyframes drift{
+    0%,100%{transform:scale(1) rotate(0deg);}
+    50%{transform:scale(1.25) rotate(8deg);}
+  }
+
+  #beam{
+    position:absolute; inset:-20%;
+    opacity:0;
+    transition:opacity .8s ease;
+    background:conic-gradient(from 0deg,
+      rgba(255,47,176,.25), rgba(34,229,255,.15), rgba(255,210,63,.2),
+      rgba(123,47,255,.25), rgba(255,47,176,.25));
+    animation:spin 14s linear infinite;
+    mix-blend-mode:screen;
+  }
+  #beam.on{opacity:1;}
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+
+  .bit{
+    position:absolute; top:-5%;
+    width:6px; height:14px;
+    border-radius:2px;
+    opacity:0;
+  }
+
+  #center{
+    position:relative; z-index:5;
+    text-align:center;
+    padding:0 28px;
+  }
+  .eyebrow{
+    letter-spacing:.3em; font-size:12px;
+    color:var(--cyan); font-weight:600;
+    margin-bottom:10px;
+  }
+  #greeting{
+    font-size:14px; color:var(--gold); font-weight:600;
+    margin-bottom:6px; min-height:18px;
+  }
+  h1{
+    font-size:clamp(28px,8vw,44px);
+    font-weight:900; line-height:1.2;
+    background:linear-gradient(90deg,var(--magenta),var(--gold),var(--cyan));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    margin-bottom:8px;
+  }
+  #trackInfo{
+    font-size:14px; color:#d8cdee; min-height:20px;
+    margin-bottom:22px;
+  }
+  #tapBtn{
+    font-family:inherit; font-size:17px; font-weight:800;
+    padding:15px 38px; border-radius:999px; border:none;
+    color:var(--void);
+    background:linear-gradient(90deg,var(--gold),var(--magenta));
+    cursor:pointer; display:none;
+    animation:pulseBtn 2.2s ease-in-out infinite;
+  }
+  #tapBtn.show{display:inline-block;}
+  @keyframes pulseBtn{
+    0%,100%{box-shadow:0 0 0 0 rgba(255,47,176,.5);}
+    50%{box-shadow:0 0 0 16px rgba(255,47,176,0);}
+  }
+  .controls{
+    margin-top:18px;
+    display:flex; gap:10px; justify-content:center;
+    flex-wrap:wrap;
+  }
+  .ctrlBtn{
+    font-family:inherit; font-size:13px; font-weight:600;
+    padding:9px 18px; border-radius:999px;
+    border:1px solid rgba(255,255,255,.25);
+    background:rgba(255,255,255,.06); color:var(--ink);
+    cursor:pointer; display:none;
+  }
+  .ctrlBtn.show{display:inline-block;}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="lights"></div>
+  <div id="beam"></div>
+
+  <div id="center">
+    <div class="eyebrow">PARTY MODE</div>
+    <div id="greeting"></div>
+    <h1 id="headline">در حال آماده‌سازی…</h1>
+    <div id="trackInfo"></div>
+    <button id="tapBtn">پخش موزیک 🎉</button>
+    <div class="controls">
+      <button id="nextBtn" class="ctrlBtn">⏭ آهنگ بعدی</button>
+      <button id="muteBtn" class="ctrlBtn">🔇 قطع صدا</button>
+    </div>
+  </div>
+</div>
+
+<audio id="player" preload="auto"></audio>
+
+<script>
+/* ===== تنظیمات ===== */
+// آدرس سرور Railway‌ت رو اینجا بذار (بدون / آخر)، مثلاً:
+// https://your-app-name.up.railway.app
+const BACKEND_URL = "PUT_YOUR_RAILWAY_URL_HERE";
+const MAX_DURATION = 240;      // زیر ۴ دقیقه
+
+const player = document.getElementById('player');
+const headline = document.getElementById('headline');
+const greeting = document.getElementById('greeting');
+const trackInfo = document.getElementById('trackInfo');
+const tapBtn = document.getElementById('tapBtn');
+const nextBtn = document.getElementById('nextBtn');
+const muteBtn = document.getElementById('muteBtn');
+const lights = document.getElementById('lights');
+const beam = document.getElementById('beam');
+const stage = document.getElementById('stage');
+
+let recentTrackIds = [];
+
+const colors = ['#ff2fb0','#22e5ff','#ffd23f','#7b2fff'];
+function spawnConfetti(n){
+  for(let i=0;i<n;i++){
+    const b = document.createElement('div');
+    b.className = 'bit';
+    b.style.left = Math.random()*100+'vw';
+    b.style.background = colors[Math.floor(Math.random()*colors.length)];
+    stage.appendChild(b);
+    const dur = 2.5 + Math.random()*2;
+    b.animate([
+      {transform:'translateY(0) rotate(0deg)', opacity:0},
+      {opacity:1, offset:0.1},
+      {transform:`translateY(105vh) rotate(${360+Math.random()*360}deg)`, opacity:0}
+    ], {duration:dur*1000, easing:'linear'});
+    setTimeout(()=>b.remove(), dur*1000);
+  }
+}
+
+/* ===== گرفتن یه آهنگ رندوم واقعی از Jamendo (بدون تکرار اخیر) ===== */
+async function fetchRandomTrack(){
+  const tags = (activeTheme && activeTheme.tags) || 'party+dance+electronic';
+  const url = `${BACKEND_URL}/track?tags=${encodeURIComponent(tags)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const tracks = data.results || [];
+  if(!tracks.length) return null;
+
+  const fresh = tracks.filter(t => !recentTrackIds.includes(t.id));
+  const pool = fresh.length ? fresh : tracks;
+  const pick = pool[Math.floor(Math.random()*pool.length)];
+
+  recentTrackIds.push(pick.id);
+  if(recentTrackIds.length > 10) recentTrackIds.shift();
+  return pick;
+}
+
+/* ===== پالس نور با ریتم شبیه‌سازی‌شده (بدون دست‌کاری خروجی صدا) ===== */
+let pulseTimer = null;
+function startLightPulse(){
+  if(pulseTimer) return;
+  const BEAT_MS = 480;
+  pulseTimer = setInterval(()=>{
+    beam.style.filter = 'brightness(1.5)';
+    lights.style.transform = 'scale(1.2)';
+    if(Math.random() < 0.4) spawnConfetti(4);
+    setTimeout(()=>{
+      beam.style.filter = 'brightness(1)';
+      lights.style.transform = 'scale(1)';
+    }, BEAT_MS*0.4);
+  }, BEAT_MS);
+}
+
+async function playTrack(){
+  headline.textContent = 'در حال پیدا کردن آهنگ…';
+  trackInfo.textContent = '';
+  const track = await fetchRandomTrack();
+  if(!track){
+    headline.textContent = 'مشکلی در گرفتن موزیک بود 😕';
+    // یه بار دیگه بعد از چند ثانیه امتحان کن
+    setTimeout(playTrack, 4000);
+    return;
+  }
+  player.src = `${BACKEND_URL}/audio?url=${encodeURIComponent(track.audio)}`;
+  headline.textContent = 'خوش اومدی 🪩';
+  trackInfo.textContent = `🎵 ${track.name} — ${track.artist_name}`;
+
+  // تایم‌اوت ایمنی: اگه پخش تا ۶ ثانیه شروع نشد (مثلاً شبکه کند بود)،
+  // به‌جای منتظر موندن بی‌نهایت، دکمه‌ی دستی رو نشون بده
+  const safetyTimer = setTimeout(()=>{
+    if(player.paused) tapBtn.classList.add('show');
+  }, 6000);
+
+  try{
+    await player.play();
+    clearTimeout(safetyTimer);
+    startLightPulse();
+    muteBtn.classList.add('show');
+    nextBtn.classList.add('show');
+    tapBtn.classList.remove('show');
+  }catch(e){
+    tapBtn.classList.add('show');
+  }
+}
+
+async function startParty(){
+  lights.classList.add('on');
+  beam.classList.add('on');
+  spawnConfetti(30);
+  await playTrack();
+}
+
+// اگه یه ترک به هر دلیلی (خطای شبکه، فایل خراب) قطع/خراب شد، خودکار برو سراغ بعدی
+player.addEventListener('error', ()=>{
+  trackInfo.textContent = 'این آهنگ در دسترس نبود، رفتیم سراغ بعدی…';
+  setTimeout(playTrack, 1200);
+});
+// اگه ترک تموم شد، خودکار یه ترک جدید بیار (پخش پیوسته)
+player.addEventListener('ended', playTrack);
+
+tapBtn.addEventListener('click', async ()=>{
+  tapBtn.classList.remove('show');
+  try{
+    await player.play();
+    startLightPulse();
+    muteBtn.classList.add('show');
+    nextBtn.classList.add('show');
+  }catch(e){}
+});
+
+nextBtn.addEventListener('click', playTrack);
+
+// لایه ایمنی: هر تاچی روی صفحه، اگه صدا هنوز واقعاً پخش نمیشه دوباره تلاش کن
+document.addEventListener('click', async ()=>{
+  if(player.paused && player.src){
+    try{ await player.play(); }catch(e){}
+  }
+}, {once:false});
+
+muteBtn.addEventListener('click', ()=>{
+  if(player.muted){
+    player.muted = false;
+    muteBtn.textContent = '🔇 قطع صدا';
+  }else{
+    player.muted = true;
+    muteBtn.textContent = '🔊 پخش صدا';
+  }
+});
+
+/* ===== تم‌های مناسبتی (وقتی از /party با آرگومان خاص میاد) ===== */
+const THEMES = {
+  birthday: {
+    label: 'جشن تولد 🎂',
+    tags: 'party+dance+happy',
+    colors: ['#ff2fb0','#ffd23f','#ff7a00','#7b2fff'],
+  },
+  newyear: {
+    label: 'سال نو 🎆',
+    tags: 'party+dance+epic',
+    colors: ['#22e5ff','#ffd23f','#7b2fff','#ff2fb0'],
+  },
+  christmas: {
+    label: 'کریسمس 🎄',
+    tags: 'party+dance+happy',
+    colors: ['#22e5ff','#ff2fb0','#ffd23f','#7b2fff'],
+  },
+};
+
+/* ===== واریانت‌های رندوم برای مهمونی معمولی (بدون مناسبت خاص) ===== */
+const RANDOM_VARIANTS = [
+  { label: 'NEON NIGHT',    tags: 'party+dance+electronic', colors: ['#ff2fb0','#22e5ff','#7b2fff','#ffd23f'] },
+  { label: 'SUNSET VIBES',  tags: 'party+dance+funk',        colors: ['#ff7a00','#ff2fb0','#ffd23f','#7b2fff'] },
+  { label: 'DEEP HOUSE',    tags: 'party+house+dance',       colors: ['#22e5ff','#7b2fff','#ff2fb0','#ffd23f'] },
+  { label: 'RETRO WAVE',    tags: 'party+dance+synthwave',   colors: ['#ff2fb0','#7b2fff','#22e5ff','#ff7a00'] },
+  { label: 'JUNGLE BEAT',   tags: 'party+dance+tropical',    colors: ['#ffd23f','#22e5ff','#ff2fb0','#7b2fff'] },
+];
+
+let activeTheme = null;
+
+function applyTheme(theme){
+  if(!theme) return;
+  activeTheme = theme;
+  document.querySelector('.eyebrow').textContent = theme.label.toUpperCase ? theme.label.toUpperCase() : theme.label;
+  const [c1,c2,c3,c4] = theme.colors;
+  document.documentElement.style.setProperty('--magenta', c1);
+  document.documentElement.style.setProperty('--gold', c2);
+  document.documentElement.style.setProperty('--cyan', c3 || c1);
+  document.documentElement.style.setProperty('--violet', c4 || c2);
+
+  // یه ذره تنوع بصری اضافه: سرعت چرخش نور و درفت هر بار کمی فرق کنه
+  beam.style.animationDuration = (10 + Math.random()*8).toFixed(1) + 's';
+  lights.style.animationDuration = (7 + Math.random()*5).toFixed(1) + 's';
+}
+
+/* ===== اتصال به تلگرام + نمایش اسم کاربر + انتخاب تم ===== */
+let startParam = null;
+if(window.Telegram && window.Telegram.WebApp){
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+  const user = tg.initDataUnsafe && tg.initDataUnsafe.user;
+  if(user && user.first_name){
+    greeting.textContent = `${user.first_name} خوش اومدی!`;
+  }
+  startParam = tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+}
+
+if(startParam && THEMES[startParam]){
+  applyTheme(THEMES[startParam]);
+}else{
+  // مناسبت خاصی انتخاب نشده -> یه واریانت رندوم برای تنوع
+  const pick = RANDOM_VARIANTS[Math.floor(Math.random()*RANDOM_VARIANTS.length)];
+  applyTheme(pick);
+}
+
+startParty();
+</script>
+</body>
+</html>
